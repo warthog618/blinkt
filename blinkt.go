@@ -1,204 +1,152 @@
+// Package blinkt provides control over a Blinkt! LED display
 package blinkt
 
-import (
-	"fmt"
-	"log"
-	"os"
-	"os/signal"
-	"time"
+// Blinkt provides control over a Blinkt! LED display
+type Blinkt struct {
+	// Pixels is the number of pixels supported by the display
+	Pixels       int
+	remainOnExit bool
+	cmdChan      chan func()
+	closed       chan struct{}
+	pp           []pixel
+	apa          APA102
+}
 
-	"github.com/alexellis/rpi"
-)
+// New creates a Blinkt to control the display.
+func New() Blinkt {
 
-const DAT int = 23
-const CLK int = 24
-
-const redIndex int = 0
-const greenIndex int = 1
-const blueIndex int = 2
-const brightnessIndex int = 3
-
-// default raw brightness.  Not to be used user-side
-const defaultBrightnessInt int = 15
-
-//upper and lower bounds for user specified brightness
-const minBrightness float64 = 0.0
-const maxBrightness float64 = 1.0
-
-// pulse sends a pulse through the DAT/CLK pins
-func pulse(pulses int) {
-	rpi.DigitalWrite(rpi.GpioToPin(DAT), 0)
-	for i := 0; i < pulses; i++ {
-		rpi.DigitalWrite(rpi.GpioToPin(CLK), 1)
-		rpi.DigitalWrite(rpi.GpioToPin(CLK), 0)
+	bl := Blinkt{
+		Pixels:  8,
+		pp:      make([]pixel, 8),
+		cmdChan: make(chan func()),
+		closed:  make(chan struct{}),
 	}
-}
+	bl.SetBrightness(50)
+	bl.apa.Open()
 
-// eof end of file or signal, from Python library
-func eof() {
-	pulse(36)
-}
-
-// sof start of file (name from Python library)
-func sof() {
-	pulse(32)
-}
-
-func writeByte(val int) {
-	for i := 0; i < 8; i++ {
-		// 0b10000000 = 128
-		rpi.DigitalWrite(rpi.GpioToPin(DAT), val&128)
-		rpi.DigitalWrite(rpi.GpioToPin(CLK), 1)
-		val = val << 1
-		rpi.DigitalWrite(rpi.GpioToPin(CLK), 0)
-	}
-}
-
-func convertBrightnessToInt(brightness float64) int {
-
-	if !inRangeFloat(minBrightness, brightness, maxBrightness) {
-		log.Fatalf("Supplied brightness was %#v - value should be between: %#v and %#v", brightness, minBrightness, maxBrightness)
-	}
-
-	return int(brightness * 31.0)
-
-}
-
-func inRangeFloat(minVal float64, testVal float64, maxVal float64) bool {
-
-	return (testVal >= minVal) && (testVal <= maxVal)
-}
-
-// SetClearOnExit turns all pixels off on Control + C / os.Interrupt signal.
-func (bl *Blinkt) SetClearOnExit(clearOnExit bool) {
-
-	if clearOnExit {
-
-		signalChan := make(chan os.Signal, 1)
-		signal.Notify(signalChan, os.Interrupt)
-		fmt.Println("Press Control + C to stop")
-
-		go func() {
-			for range signalChan {
-				bl.Clear()
-				bl.Show()
-				os.Exit(1)
+	/* cmdLoop serialises writes to APA102 and closing */
+	go func() {
+		for {
+			cmd := <-bl.cmdChan
+			cmd()
+			select {
+			case <-bl.closed:
+				return
+			default:
 			}
-		}()
+		}
+	}()
+	return bl
+}
+
+// Close the Blinkt interface.
+func (bl *Blinkt) Close() {
+	closer := func() {
+		if !bl.remainOnExit {
+			bl.apa.WritePixels(make([]pixel, 8))
+		}
+		bl.apa.Close()
+		close(bl.closed)
+	}
+	select {
+	case bl.cmdChan <- closer:
+		<-bl.closed
+	case <-bl.closed:
 	}
 }
 
-// Delay maps to time.Sleep, for ms milliseconds
-func Delay(ms int) {
-	time.Sleep(time.Duration(ms) * time.Millisecond)
-}
-
-// Clear sets all the pixels to off, you still have to call Show.
+// Clear sets all the pixels to off.
+//
+// Show must still be called to update the physical display.
 func (bl *Blinkt) Clear() {
-	r := 0
-	g := 0
-	b := 0
-	bl.SetAll(r, g, b)
-}
-
-// Show updates the LEDs with the values from SetPixel/Clear.
-func (bl *Blinkt) Show() {
-	sof()
-	for p, _ := range bl.pixels {
-		brightness := bl.pixels[p][brightnessIndex]
-		r := bl.pixels[p][redIndex]
-		g := bl.pixels[p][greenIndex]
-		b := bl.pixels[p][blueIndex]
-
-		// 0b11100000 (224)
-		bitwise := 224
-		writeByte(bitwise | brightness)
-		writeByte(b)
-		writeByte(g)
-		writeByte(r)
+	for p := range bl.pp {
+		bl.pp[p] &= 0xff000000
 	}
-	eof()
 }
 
-// SetAll sets all pixels to specified r, g, b colour. Show must be called to update the LEDs.
-func (bl *Blinkt) SetAll(r int, g int, b int) *Blinkt {
+// ClearPixel sets the pixel to off.
+//
+// Show must still be called to update the physical display.
+func (bl *Blinkt) ClearPixel(p int) {
+	bl.pp[p] &= 0xff000000
+}
 
-	for p, _ := range bl.pixels {
+// SetClearOnExit controls the blanking of the display when the Blinkt is closed.
+//
+// When clearOneExit is true all pixels are turned off when Blinkt is closed.
+// This is the default.
+// When clearOneExit is false the display is left in its current state.
+func (bl *Blinkt) SetClearOnExit(clearOnExit bool) {
+	bl.remainOnExit = !clearOnExit
+}
+
+// Show updates the physical dispolay with the values from Set/Clear.
+func (bl *Blinkt) Show() {
+	pixels := append([]pixel(nil), bl.pp[:]...)
+	show := func() {
+		bl.apa.WritePixels(pixels)
+	}
+	select {
+	case bl.cmdChan <- show:
+	case <-bl.closed:
+	}
+}
+
+// SetAll sets all pixels to specified r, g, b colour.
+//
+// Show must be called to update the LEDs.
+func (bl *Blinkt) SetAll(r, g, b int) {
+
+	for p := range bl.pp {
 		bl.SetPixel(p, r, g, b)
 	}
-
-	return bl
 }
 
-// SetPixel sets an individual pixel to specified r, g, b colour. Show must be called to update the LEDs.
-func (bl *Blinkt) SetPixel(p int, r int, g int, b int) *Blinkt {
-
-	bl.pixels[p][redIndex] = r
-	bl.pixels[p][greenIndex] = g
-	bl.pixels[p][blueIndex] = b
-
-	return bl
-
+// SetPixel sets an individual pixel to specified r, g, b colour.
+//
+// Show must be called to update the LEDs.
+func (bl *Blinkt) SetPixel(p, r, g, b int) {
+	px := bl.pp[p] & 0xff000000
+	px |= pixel((b << 16) | g<<8 | r)
+	bl.pp[p] = px
 }
 
-// SetBrightness sets the brightness of all pixels. Brightness supplied should be between: 0.0 to 1.0
-func (bl *Blinkt) SetBrightness(brightness float64) *Blinkt {
+// SetBrightness sets the brightness of all pixels.
+//
+// Brightness should be in percent, i.e. 0 to 100.0.
+// Greater than or equal to 100 is assumed to mean full brightness.
+// Less than or equal to 0 is assumed to mean off.
+func (bl *Blinkt) SetBrightness(brightness float64) {
 
 	brightnessInt := convertBrightnessToInt(brightness)
 
-	for p, _ := range bl.pixels {
-		bl.pixels[p][brightnessIndex] = brightnessInt
+	for i, px := range bl.pp {
+		px &^= 0xff000000
+		px |= pixel(brightnessInt << 24)
+		bl.pp[i] = px
 	}
-
-	return bl
 }
 
-// SetPixelBrightness sets the brightness of pixel p. Brightness supplied should be between: 0.0 to 1.0
-func (bl *Blinkt) SetPixelBrightness(p int, brightness float64) *Blinkt {
-
+// SetPixelBrightness sets the brightness of pixel p.
+//
+// Brightness should be in percent, i.e. 0 to 100.0.
+// Greater than or equal to 100 is assumed to mean full brightness.
+// Less than or equal to 0 is assumed to mean off.
+func (bl *Blinkt) SetPixelBrightness(p int, brightness float64) {
 	brightnessInt := convertBrightnessToInt(brightness)
-	bl.pixels[p][brightnessIndex] = brightnessInt
-	return bl
+	bl.pp[p] = pixel(uint(bl.pp[p])&^uint(0xff000000) | brightnessInt<<24)
 }
 
-func initPixels(brightness int) [8][4]int {
-	var pixels [8][4]int
-	for p, _ := range pixels {
-		pixels[p][redIndex] = 0
-		pixels[p][greenIndex] = 0
-		pixels[p][blueIndex] = 0
-		pixels[p][brightnessIndex] = brightness
+type pixel uint
+
+func convertBrightnessToInt(brightness float64) uint {
+
+	switch {
+	case brightness <= 0:
+		return 0
+	case brightness >= 100:
+		return 31
+	default:
+		return uint(brightness * 0.31)
 	}
-	return pixels
-}
-
-// Setup initializes GPIO via WiringPi base library.
-func (bl *Blinkt) Setup() {
-	rpi.WiringPiSetup()
-	rpi.PinMode(rpi.GpioToPin(DAT), rpi.OUTPUT)
-	rpi.PinMode(rpi.GpioToPin(CLK), rpi.OUTPUT)
-}
-
-// NewBlinkt creates a Blinkt to interact with. You must call "Setup()" immediately afterwards.
-func NewBlinkt(brightness ...float64) Blinkt {
-
-	//brightness is optional so set the default
-	brightnessInt := defaultBrightnessInt
-
-	//over-ride the default if the user has supplied a brightness value
-	if len(brightness) > 0 {
-		brightnessInt = convertBrightnessToInt(brightness[0])
-	}
-	return Blinkt{
-		pixels: initPixels(brightnessInt),
-	}
-}
-
-// Blinkt use the NewBlinkt function to initialize the pixels property.
-type Blinkt struct {
-	pixels [8][4]int
-}
-
-func init() {
-
 }
