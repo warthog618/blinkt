@@ -11,7 +11,7 @@ GPIO implementations, and incorporating a merge/port of Alex's
 ## Quick Start
 
 ```go
-import "github.com/warthog619/blinkt"
+import "github.com/warthog618/blinkt"
 
 // create a blinkt to control the display
 bl := blinkt.New()
