@@ -7,27 +7,27 @@ package blinkt
 import (
 	"log"
 
-	"github.com/warthog618/gpiod"
-	"github.com/warthog618/gpiod/device/rpi"
+	"github.com/warthog618/go-gpiocdev"
+	"github.com/warthog618/go-gpiocdev/device/rpi"
 )
 
 // APA102 implements the interface to the Blinkt! hardware
 type APA102 struct {
-	dat *gpiod.Line
-	clk *gpiod.Line
+	dat *gpiocdev.Line
+	clk *gpiocdev.Line
 }
 
 // Open the interface to APA102
 func (a *APA102) Open() {
-	c, err := gpiod.NewChip("gpiochip0", gpiod.WithConsumer("blinkt!"))
+	c, err := gpiocdev.NewChip("gpiochip0", gpiocdev.WithConsumer("blinkt!"))
 	if err != nil {
 		log.Fatalf("Error opening gpiochip0: %s", err)
 	}
-	a.dat, err = c.RequestLine(rpi.GPIO23, gpiod.AsOutput(0))
+	a.dat, err = c.RequestLine(rpi.GPIO23, gpiocdev.AsOutput(0))
 	if err != nil {
 		log.Fatalf("Error requesting data line: %s", err)
 	}
-	a.clk, err = c.RequestLine(rpi.GPIO24, gpiod.AsOutput(1))
+	a.clk, err = c.RequestLine(rpi.GPIO24, gpiocdev.AsOutput(1))
 	if err != nil {
 		log.Fatalf("Error requesting clock line: %s", err)
 	}
@@ -36,8 +36,8 @@ func (a *APA102) Open() {
 
 // Close the interface to the APA102
 func (a *APA102) Close() {
-	a.dat.Reconfigure(gpiod.AsInput)
-	a.clk.Reconfigure(gpiod.AsInput)
+	a.dat.Reconfigure(gpiocdev.AsInput)
+	a.clk.Reconfigure(gpiocdev.AsInput)
 	a.dat.Close()
 	a.clk.Close()
 }

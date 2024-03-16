@@ -3,7 +3,7 @@ blinkt
 
 This library is a fork of Alex Ellis'
 [blinkt_go](https://github.com/alexellis/blinkt_go) that I was intending to port
-to my [gpiod](https://github.com/warthog618/gpiod) library, but ended up going
+to my [gpiocdev](https://github.com/warthog618/gpiocdev) library, but ended up going
 off on a bit of a tangent and also using it as a testbed for comparing various
 GPIO implementations, and incorporating a merge/port of Alex's
 [blinkt_go_examples](https://github.com/alexellis/blinkt_go_examples).
@@ -166,12 +166,12 @@ selection being performed by a build tag. e.g.
 
 will build an application using the WiringPi backend.
 
-The default backend is my [gpiod](https://github.com/warthog618/gpiod) library,
+The default backend is my [gpiocdev](https://github.com/warthog618/gpiocdev) library,
 which makes use of the official Linux GPIO interface.
 
 |Backend|Build tag|Interface|
 |---|---|---|
-|[gpiod](https://github.com/warthog618/gpiod)|none (default)|Linux GPIO character device (*/dev/gpiochip0*) uAPI |
+|[gpiocdev](https://github.com/warthog618/gpiocdev)|none (default)|Linux GPIO character device (*/dev/gpiochip0*) uAPI |
 |[gpio](https://github.com/warthog618/gpio)|blinkt_gpio|Raspberry Pi */dev/gpiomem* direct access to the BCM hardware|
 |[wiringpi](https://github.com/alexellis/rpi/)| blinkt_wiringpi|WiringPi cgo wrapper|
 |[sysfs](https://github.com/alexellis/blinkt_go/)| blinkt_sysfs|deprecated GPIO SYSFS interface|
@@ -206,7 +206,7 @@ A summary of the results for each of the backends:
 
 |Backend|ns/op|Shows/sec|
 |---|---|---|
-|gpiod|10547923|94|
+|gpiocdev|10547923|94|
 |gpio|102205|9784|
 |wiringpi|3435945|291|
 |sysfs|66638981|15|
@@ -215,7 +215,7 @@ A summary of the results for each of the backends:
 For comparison the Python/WiringPi implementation can perform around 9 shows/sec
 on the same platform.
 
-My recommendation is to use the **gpiod** backend unless you have a serious need
+My recommendation is to use the **gpiocdev** backend unless you have a serious need
 for speed or very low CPU utilization (and aren't concerned about conflicting
 with other BCM drivers), in which case the **gpio** library is a clear winner.
 
