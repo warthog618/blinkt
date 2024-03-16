@@ -166,12 +166,12 @@ selection being performed by a build tag. e.g.
 
 will build an application using the WiringPi backend.
 
-The default backend is my [gpiocdev](https://github.com/warthog618/gpiocdev) library,
+The default backend is my [gpiocdev](https://github.com/warthog618/go-gpiocdev) library,
 which makes use of the official Linux GPIO interface.
 
 |Backend|Build tag|Interface|
 |---|---|---|
-|[gpiocdev](https://github.com/warthog618/gpiocdev)|none (default)|Linux GPIO character device (*/dev/gpiochip0*) uAPI |
+|[gpiocdev](https://github.com/warthog618/go-gpiocdev)|none (default)|Linux GPIO character device (*/dev/gpiochip0*) uAPI |
 |[gpio](https://github.com/warthog618/gpio)|blinkt_gpio|Raspberry Pi */dev/gpiomem* direct access to the BCM hardware|
 |[wiringpi](https://github.com/alexellis/rpi/)| blinkt_wiringpi|WiringPi cgo wrapper|
 |[sysfs](https://github.com/alexellis/blinkt_go/)| blinkt_sysfs|deprecated GPIO SYSFS interface|
