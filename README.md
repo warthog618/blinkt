@@ -3,7 +3,7 @@ blinkt
 
 This library is a fork of Alex Ellis'
 [blinkt_go](https://github.com/alexellis/blinkt_go) that I was intending to port
-to my [gpiocdev](https://github.com/warthog618/gpiocdev) library, but ended up going
+to my [gpiocdev](https://github.com/warthog618/go-gpiocdev) library, but ended up going
 off on a bit of a tangent and also using it as a testbed for comparing various
 GPIO implementations, and incorporating a merge/port of Alex's
 [blinkt_go_examples](https://github.com/alexellis/blinkt_go_examples).
